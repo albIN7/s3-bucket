@@ -2,12 +2,13 @@ int RGWListBucket_ObjStore_S3::get_params()
 {
   list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
-  if (!list_versions) {
+/*  if (!list_versions) {
     marker = s->info.args.get("marker");
   } else {
     marker.name = s->info.args.get("key-marker");
     marker.instance = s->info.args.get("version-id-marker");
   }
+  */
 
   // non-standard
   ContinuationToken.name = s->info.args.get("ContinuationToken");

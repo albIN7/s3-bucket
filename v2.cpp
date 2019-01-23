@@ -1,4 +1,4 @@
-int RGWListBucket_ObjStore_S3::get_params()
+int RGWListBucketv2_ObjStore_S3::get_params()
 {
   list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
@@ -25,7 +25,7 @@ int RGWListBucket_ObjStore_S3::get_params()
 
 
 
-void RGWListBucket_ObjStore_S3::send_response()
+void RGWListBucketv2_ObjStore_S3::send_response()
 {
   if (op_ret < 0)
     set_req_state_err(s, op_ret);

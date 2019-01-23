@@ -10,7 +10,7 @@ int RGWListBucket_ObjStore_S3::get_params()
   }
   */
 
-  // non-standard
+  
   ContinuationToken.name = s->info.args.get("ContinuationToken");
   s->info.args.get_bool("allow-unordered", &allow_unordered, false);
 

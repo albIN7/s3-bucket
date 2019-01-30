@@ -13,10 +13,13 @@ region_name='',
 
 
 bucket = client.create_bucket(Bucket='sts_bkt2')
-bucket = client.create_bucket(Bucket='sts_bkt3')
-response = client.list_buckets()
+#bucket = client.create_bucket(Bucket='sts_bkt3')
+response1 = client.list_objects_v2(Bucket='sts_bkt2')
+"""
 for bucket in response["Buckets"]:
         print "{name}\t{created}".format(
                     name = bucket['Name'],
                     created = bucket['CreationDate'],
         )
+"""
+print response1

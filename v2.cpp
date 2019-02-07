@@ -1,16 +1,26 @@
+
+
+// rgw_rest_s3.h
+
+class RGWListBucketv2_ObjStore_S3 : public RGWListBucket_ObjStore {
+  bool objs_container;
+public:
+  RGWListBucketv2_ObjStore_S3() : objs_container(false) {
+    default_max = 1000;
+  }
+  ~RGWListBucketv2_ObjStore_S3() override {}
+
+  int get_params() override;
+  void send_response() override;
+};
+
+//rgw_rest_s3.cc
+
 int RGWListBucketv2_ObjStore_S3::get_params()
 {
   list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
-/*  if (!list_versions) {
-    marker = s->info.args.get("marker");
-  } else {
-    marker.name = s->info.args.get("key-marker");
-    marker.instance = s->info.args.get("version-id-marker");
-  }
-  */
-
-  
+   // non-standard
   ContinuationToken.name = s->info.args.get("ContinuationToken");
   s->info.args.get_bool("allow-unordered", &allow_unordered, false);
 
@@ -22,7 +32,24 @@ int RGWListBucketv2_ObjStore_S3::get_params()
     return op_ret;
   }
 
+  encoding_type = s->info.args.get("encoding-type");
+  if (s->system_request) {
+    s->info.args.get_bool("objs-container", &objs_container, false);
+    const char *shard_id_str = s->info.env->get("HTTP_RGWX_SHARD_ID");
+    if (shard_id_str) {
+      string err;
+      shard_id = strict_strtol(shard_id_str, 10, &err);
+      if (!err.empty()) {
+        ldout(s->cct, 5) << "bad shard id specified: " << shard_id_str << dendl;
+        return -EINVAL;
+      }
+    } else {
+      shard_id = s->bucket_instance_shard_id;
+    }
+  }
 
+  return 0;
+}
 
 
 void RGWListBucketv2_ObjStore_S3::send_response()
@@ -31,19 +58,19 @@ void RGWListBucketv2_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   dump_errno(s);
 
-  // Explicitly use chunked transfer encoding so that we can stream the result
+   // Explicitly use chunked transfer encoding so that we can stream the result
   // to the user without having to wait for the full length of it.
   end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
   dump_start(s);
   if (op_ret < 0)
     return;
 
-  if (list_versions) {
+   if (list_versions) {
     send_versioned_response();
     return;
   }
 
-  s->formatter->open_object_section_in_ns("ListBucketResult", XMLNS_AWS_S3);
+   s->formatter->open_object_section_in_ns("ListBucketResult", XMLNS_AWS_S3);
   if (!s->bucket_tenant.empty())
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   s->formatter->dump_string("Name", s->bucket_name);
@@ -57,16 +84,16 @@ void RGWListBucketv2_ObjStore_S3::send_response()
   if (!delimiter.empty())
     s->formatter->dump_string("Delimiter", delimiter);
 
-  s->formatter->dump_string("IsTruncated", (max && is_truncated ? "true"
+   s->formatter->dump_string("IsTruncated", (max && is_truncated ? "true"
                         : "false"));
 
-  bool encode_key = false;
+   bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
   }
 
-  if (op_ret >= 0) {
+   if (op_ret >= 0) {
     vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       rgw_obj_key key(iter->key);

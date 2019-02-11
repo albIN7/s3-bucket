@@ -2,13 +2,13 @@
 
 // rgw_rest_s3.h
 
-class RGWListBucketv2_ObjStore_S3 : public RGWListBucket_ObjStore {
+class RGWListBucket_ObjStore_S3v2 : public RGWListBucket_ObjStore {
   bool objs_container;
 public:
-  RGWListBucketv2_ObjStore_S3() : objs_container(false) {
+  RGWListBucket_ObjStore_S3v2() : objs_container(false) {
     default_max = 1000;
   }
-  ~RGWListBucketv2_ObjStore_S3() override {}
+  ~RGWListBucket_ObjStore_S3v2() override {}
 
   int get_params() override;
   void send_response() override;
@@ -16,14 +16,9 @@ public:
 
 //rgw_rest_s3.cc
 
-int RGWListBucketv2_ObjStore_S3::get_params()
+int RGWListBucket_ObjStore_S3v2::get_params()
 {
-  string errCode = None;
-  if(s->info.args.get("ContinuationToken").empty())
-  {
-    errCode = IncorrectContinuationToken;
-    return;
-  }
+  if(s->info.args.get("ContinuationToken").empty()) return;
   list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
   token = s->info.args.get("ContinuationToken");
@@ -59,76 +54,80 @@ int RGWListBucketv2_ObjStore_S3::get_params()
   return 0;
 }
 
-void RGWListBucketv2_ObjStore_S3::send_response()
+void RGWListBucket_ObjStore_S3v2::send_response()
 {
+  int KeyCount;
   if (op_ret < 0)
     set_req_state_err(s, op_ret);
   dump_errno(s);
 
-   // Explicitly use chunked transfer encoding so that we can stream the result
+  // Explicitly use chunked transfer encoding so that we can stream the result
   // to the user without having to wait for the full length of it.
   end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
   dump_start(s);
   if (op_ret < 0)
     return;
-
-   if (list_versions) {
+/*
+  if (list_versions) {
     send_versioned_response();
     return;
   }
+  */
 
-   s->formatter->open_object_section_in_ns("ListBucketResult", XMLNS_AWS_S3);
+  s->formatter->open_object_section_in_ns("ListBucketResult", XMLNS_AWS_S3);
   if (!s->bucket_tenant.empty())
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   s->formatter->dump_string("Name", s->bucket_name);
   s->formatter->dump_string("Prefix", prefix);
-  //Instead of knowing the last key, we are checking the existence of nextcontinuationtoken
-  s->formatter->dump_string("ContinuationToken", ContinuationToken.name);
-  if (is_truncated && !NextContinuationToken.empty())
-    s->formatter->dump_string(ContinuationToken.name,NextContinuationToken.name);
-  s->formatter->dump_string("NextContinuationToken",NextContinuationToken.name);
   s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty())
     s->formatter->dump_string("Delimiter", delimiter);
 
-   s->formatter->dump_string("IsTruncated", (max && is_truncated ? "true"
-                        : "false"));
+  s->formatter->dump_string("IsTruncated", (max && is_truncated ? "true"
+              : "false"));
 
-   bool encode_key = false;
+  bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
   }
 
-   if (op_ret >= 0) {
+  if (op_ret >= 0) {
     vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       rgw_obj_key key(iter->key);
       s->formatter->open_array_section("Contents");
       if (encode_key) {
-    string key_name;
-    url_encode(key.name, key_name);
-    s->formatter->dump_string("Key", key_name);
+  string key_name;
+  url_encode(key.name, key_name);
+  s->formatter->dump_string("Key", key_name);
       } else {
-    s->formatter->dump_string("Key", key.name);
+  s->formatter->dump_string("Key", key.name);
       }
       dump_time(s, "LastModified", &iter->meta.mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
       s->formatter->dump_int("Size", iter->meta.accounted_size);
-      s->formatter->dump_string("StorageClass", "STANDARD");
+      auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
+      s->formatter->dump_string("StorageClass", storage_class.c_str());
       dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       if (s->system_request) {
         s->formatter->dump_string("RgwxTag", iter->tag);
       }
       s->formatter->close_section();
     }
+    
     if (!common_prefixes.empty()) {
       map<string, bool>::iterator pref_iter;
       for (pref_iter = common_prefixes.begin();
-       pref_iter != common_prefixes.end(); ++pref_iter) {
-    s->formatter->open_array_section("CommonPrefixes");
-    s->formatter->dump_string("Prefix", pref_iter->first);
-    s->formatter->close_section();
+     pref_iter != common_prefixes.end(); ++pref_iter) {
+  s->formatter->open_array_section("CommonPrefixes");
+  s->formatter->dump_string("Prefix", pref_iter->first);
+  //s->formatter->dump_string("KeyCount",)   Find length of json Contents and CommonPrefixes
+  s->formatter->dump_string("ContinuationToken",token);
+  //Find NextContinuationToken
+  s->formatter->dump_int("StartAfter", start-after);
+
+  s->formatter->close_section();
       }
     }
   }

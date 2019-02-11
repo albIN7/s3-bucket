@@ -18,10 +18,17 @@ public:
 
 int RGWListBucketv2_ObjStore_S3::get_params()
 {
+  string errCode = None;
+  if(s->info.args.get("ContinuationToken").empty())
+  {
+    errCode = IncorrectContinuationToken;
+    return;
+  }
   list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
+  token = s->info.args.get("ContinuationToken");
+  startAfter = s->info.args.get("start-after");
    // non-standard
-  ContinuationToken.name = s->info.args.get("ContinuationToken");
   s->info.args.get_bool("allow-unordered", &allow_unordered, false);
 
   delimiter = s->info.args.get("delimiter");
@@ -33,6 +40,7 @@ int RGWListBucketv2_ObjStore_S3::get_params()
   }
 
   encoding_type = s->info.args.get("encoding-type");
+  fetchOwner = s->info.args.get("fetch-owner");
   if (s->system_request) {
     s->info.args.get_bool("objs-container", &objs_container, false);
     const char *shard_id_str = s->info.env->get("HTTP_RGWX_SHARD_ID");
@@ -50,7 +58,6 @@ int RGWListBucketv2_ObjStore_S3::get_params()
 
   return 0;
 }
-
 
 void RGWListBucketv2_ObjStore_S3::send_response()
 {
